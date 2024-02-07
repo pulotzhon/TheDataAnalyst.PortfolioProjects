@@ -19,25 +19,46 @@
 */
 
 -- A. KPI’s (Key Performance Indicator metrics)
----		1. Total Number of Accommodations Booked.
-SELECT SUM(number_of_reviews) AS TotalNumberOfReviews
+---		1. Total Bookings.
+SELECT SUM(number_of_reviews) AS total_bookings
 FROM dbo.listings_cleaned
 
+---		2. Total Accommodation Properties.
+SELECT COUNT(id) AS total_accomm_properties
+FROM dbo.listings_cleaned
 
----		2. Total Number of Hosts.
-SELECT COUNT(host_id) AS TotalNumberOfHosts
+---		3. Total Hosts.
+SELECT COUNT(host_id) AS total_hosts
 FROM dbo.host_profile
 
 
----		3. Overall Number of Rates Per Star Rating.
-SELECT DISTINCT ROUND(review_scores_rating, 0) AS star
-	, COUNT(review_scores_rating) AS number_of_reviews
-FROM dbo.listings_cleaned
-GROUP BY ROUND(review_scores_rating, 0)
-ORDER BY ROUND(review_scores_rating, 0) DESC
+-- B. Yearly Trend for Bookings
+WITH cte AS
+(SELECT DISTINCT YEAR(lis.first_review) AS year_
+	, (SELECT SUM(number_of_reviews) FROM dbo.listings_cleaned 
+		WHERE YEAR(first_review) BETWEEN 2009 AND YEAR(lis.first_review)) AS total_bookings
+	, SUM(number_of_reviews) OVER (PARTITION BY YEAR(lis.first_review)) AS new_bookings
+FROM dbo.listings_cleaned AS lis)
+SELECT *
+	, CAST(CAST(new_bookings AS DECIMAL(10,1)) 
+	/ CAST(total_bookings AS DECIMAL(10,1))*100 AS DECIMAL(10,1)) AS percentage_of_increase
+FROM cte
+ORDER BY year_
 
+-- C. Yearly Trend for Accommodation Properties.
+WITH cte AS
+(SELECT DISTINCT YEAR(lis.first_review) AS year_
+	, (SELECT COUNT(id) FROM dbo.listings_cleaned 
+		WHERE YEAR(first_review) BETWEEN 2009 AND YEAR(lis.first_review)) AS total_accomm_properties
+	, COUNT(id) OVER (PARTITION BY YEAR(lis.first_review)) AS new_accomm_properties
+FROM dbo.listings_cleaned AS lis)
+SELECT *
+	, CAST(CAST(new_accomm_properties AS DECIMAL(10,1)) 
+	/ CAST(total_accomm_properties AS DECIMAL(10,1))*100 AS DECIMAL(10,1)) AS percentage_of_increase
+FROM cte
+ORDER BY year_
 
--- B. Host Growth by Year.
+-- D. Yearly Trend for Host Growth.
 WITH cte AS
 (SELECT *
 	, RANK() OVER(ORDER BY host_since) rn
@@ -53,7 +74,15 @@ group by year(host_since)
 order by year(host_since)
 
 
---	This statement create function to split and count the most used word.
+--	E. Review Rating Breakdown By Stars.
+SELECT DISTINCT ROUND(review_scores_rating, 0) AS star
+	, SUM(number_of_reviews) AS number_of_reviews
+FROM dbo.listings_cleaned
+GROUP BY ROUND(review_scores_rating, 0)
+ORDER BY ROUND(review_scores_rating, 0) DESC
+
+--	F. Review Comments Breakdown By Positive/Negative Feedback
+---		1. This statement create function to split and count the most used word.
 CREATE FUNCTION [dbo].[DelimitedSplitN4K](
     @pString NVARCHAR(4000), 
     @pDelimiter NCHAR(1)
@@ -84,9 +113,8 @@ SELECT
     Item       = SUBSTRING(@pString, l.N1, l.L1)
 FROM cteLen l;
 
-
---	C. This statement calls function dbo.DelimitedSplitN4K on dbo.reviews to split words 
---		from comments column, distinct them and counts number of occurrences.
+---		2. This statement calls function dbo.DelimitedSplitN4K on dbo.reviews to split words 
+---		from comments column, distinct them and counts the number of occurrences.
 SELECT TOP 50
     x.Item,
     COUNT(*)
@@ -96,8 +124,7 @@ WHERE LTRIM(RTRIM(x.Item)) <> ''
 GROUP BY x.Item
 ORDER BY COUNT(*) DESC
 
-
---	D. After creating function dbo.DelimitedSplitN4K and splitting words, 
+--		3. After creating function dbo.DelimitedSplitN4K and splitting words, 
 --		this statement uses key words combination pattern to search and filter 
 --		comments into positive and negative categories.
 
