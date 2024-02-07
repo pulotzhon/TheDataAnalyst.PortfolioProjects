@@ -31,6 +31,11 @@ FROM dbo.listings_cleaned
 SELECT COUNT(host_id) AS total_hosts
 FROM dbo.host_profile
 
+--		4. Average Booking.
+SELECT SUM(number_of_reviews) / COUNT(id) AS avg_per_accomm_property
+	, SUM(number_of_reviews) / COUNT(distinct host_id) AS avg_per_host
+FROM dbo.listings_cleaned AS lis
+
 
 -- B. Yearly Trend for Bookings
 WITH cte AS
